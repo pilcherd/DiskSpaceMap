@@ -1,0 +1,72 @@
+name: Prepare release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release version
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Match the tag to the project version
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          [xml]$project = Get-Content DiskSpaceMap/DiskSpaceMap.csproj -Raw
+          $version = [string]$project.Project.PropertyGroup.Version
+          if ($env:RELEASE_TAG -cne "v$version") {
+            throw "Tag $env:RELEASE_TAG does not match project version v$version."
+          }
+
+  build:
+    name: Build verified Windows packages
+    needs: validate
+    uses: ./.github/workflows/build.yml
+
+  draft:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the tagged release notes
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download verified packages
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          pattern: DiskSpaceMap-win-*
+          path: artifacts/release
+          merge-multiple: true
+
+      - name: Publish both architectures and SHA-256 checksums
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            artifacts/release/*.zip artifacts/release/*.sha256 \
+            --verify-tag \
+            --title "DiskSpaceMap ${RELEASE_TAG#v}" \
+            --notes-file CHANGELOG.md

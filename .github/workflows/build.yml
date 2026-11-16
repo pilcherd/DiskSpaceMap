@@ -1,0 +1,64 @@
+name: Build and verify
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.runtime }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            runtime: win-x64
+          - runner: windows-11-arm
+            runtime: win-arm64
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned .NET SDK
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Build and run scanner and UI checks
+        run: ./tools/Test-Project.ps1
+
+      - name: Publish standalone executable
+        run: ./tools/Publish-Standalone.ps1 -RuntimeIdentifier '${{ matrix.runtime }}'
+
+      - name: Verify the packaged executable without opening a window
+        run: ./tools/Verify-Standalone.ps1 -RuntimeIdentifier '${{ matrix.runtime }}'
+
+      - name: Package executable, documentation and licenses
+        run: ./tools/New-ReleaseArchive.ps1 -RuntimeIdentifier '${{ matrix.runtime }}'
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: DiskSpaceMap-${{ matrix.runtime }}
+          path: |
+            artifacts/release/DiskSpaceMap-*-${{ matrix.runtime }}.zip
+            artifacts/release/DiskSpaceMap-*-${{ matrix.runtime }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0

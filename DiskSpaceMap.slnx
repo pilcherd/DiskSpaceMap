@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="DiskSpaceMap.Core/DiskSpaceMap.Core.csproj" />
+  <Project Path="DiskSpaceMap.Checks/DiskSpaceMap.Checks.csproj" />
+  <Project Path="DiskSpaceMap.RenderChecks/DiskSpaceMap.RenderChecks.csproj" />
+  <Project Path="DiskSpaceMap/DiskSpaceMap.csproj" />
+</Solution>
